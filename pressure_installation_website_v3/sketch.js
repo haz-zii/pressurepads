@@ -1,7 +1,4 @@
-// VISUAL + ARDUINO INPUT — p5.js
-// Arduino sends one A0 reading per line at 9600 baud.
-// Lower readings indicate greater pressure with the current voltage-divider setup.
-
+// VISUAL + ARDUINO INPUT — optimized p5.js version
 let serialPort;
 let serialReader;
 let serialBuffer = "";
@@ -10,12 +7,13 @@ let pressureValue = 1023;
 let pressureAmount = 0;
 let pressureThreshold = 800;
 let wasPressed = false;
+let isConnected = false;
 
 function setup() {
   const canvas = createCanvas(960, 540);
   canvas.parent(document.body);
   pixelDensity(1);
-  frameRate(30);
+  frameRate(24);
   noStroke();
 
   document.getElementById("connectButton").addEventListener("click", connectArduino);
@@ -25,13 +23,11 @@ function setup() {
 async function connectArduino() {
   try {
     if (!("serial" in navigator)) {
-      alert("Web Serial is unavailable. Open this website in Chrome.");
+      alert("Web Serial is unavailable. Please use Chrome.");
       return;
     }
 
-    // The button click also initializes browser audio permission.
     await setupAudio();
-
     serialPort = await navigator.serial.requestPort();
     await serialPort.open({ baudRate: 9600 });
 
@@ -39,6 +35,7 @@ async function connectArduino() {
     serialPort.readable.pipeTo(decoder.writable);
     serialReader = decoder.readable.getReader();
 
+    isConnected = true;
     document.getElementById("status").textContent = "ARDUINO: CONNECTED";
     readSerial();
   } catch (error) {
@@ -53,7 +50,7 @@ async function readSerial() {
     if (result.done) return;
 
     serialBuffer += result.value;
-    const serialLines = serialBuffer.split("\\n");
+    const serialLines = serialBuffer.split("\n");
     serialBuffer = serialLines.pop();
 
     for (const serialLine of serialLines) {
@@ -62,10 +59,10 @@ async function readSerial() {
         pressureValue = constrain(reading, 0, 1023);
       }
     }
-
     readSerial();
   } catch (error) {
     console.error("Serial reading error:", error);
+    isConnected = false;
     document.getElementById("status").textContent = "ARDUINO: CONNECTION LOST";
   }
 }
@@ -103,21 +100,22 @@ function drawGenerativeVisual() {
   const centerY = height / 2;
   const intensity = pressureAmount;
 
-  for (let y = 0; y < height; y += 14) {
-    for (let x = 0; x < width; x += 14) {
+  // Larger spacing reduces draw calls while preserving the overall visual field.
+  for (let y = 0; y < height; y += 20) {
+    for (let x = 0; x < width; x += 20) {
       const radialDistance = dist(x, y, centerX, centerY);
       const wave = sin(radialDistance * 0.025 - frameCount * 0.035);
-      const secondWave = cos(x * 0.018 + y * 0.024 + frameCount * 0.022);
+      const secondaryWave = cos(x * 0.018 + y * 0.024 + frameCount * 0.022);
 
       const movement = wave * 30 * intensity;
-      const distortion = secondWave * 18 * intensity;
+      const distortion = secondaryWave * 18 * intensity;
 
       const red = map(sin(radialDistance * 0.014 + frameCount * 0.018), -1, 1, 90, 255);
       const green = map(sin(x * 0.018 + frameCount * 0.012), -1, 1, 15, 210);
       const blue = map(cos(y * 0.019 + frameCount * 0.016), -1, 1, 110, 255);
 
       fill(red, green, blue, 210 * intensity);
-      rect(x + movement, y + distortion, 5 + intensity * 5, 5 + intensity * 5);
+      rect(x + movement, y + distortion, 7 + intensity * 5, 7 + intensity * 5);
     }
   }
 }
